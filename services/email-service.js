@@ -59,7 +59,7 @@ class EmailService {
         html: htmlContent,
         tags: [
           { name: 'type', value: 'review_request' },
-          { name: 'business', value: businessName },
+          { name: 'business', value: businessName.replace(/[^a-zA-Z0-9_-]/g, '_') }
         ]
       };
       
