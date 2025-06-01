@@ -1,73 +1,93 @@
-// server.js - Main entry point for the notification server
+// server.js or app.js - Your main email server file
+// Add keep-alive integration to your existing server
 
 const express = require('express');
 const cors = require('cors');
-const helmet = require('helmet');
-const dotenv = require('dotenv');
-const { body, validationResult } = require('express-validator');
-const emailRoutes = require('./routes/email-routes');
-const smsRoutes = require('./routes/sms-routes');
-const loggerMiddleware = require('./middleware/logger');
-const errorHandler = require('./middleware/error-handler');
+const { keepAlive } = require('./server-keepalive'); // Import keep-alive
 
-// Load environment variables
-dotenv.config();
-
-// Initialize Express app
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Apply security headers
-app.use(helmet());
-
-// Enable CORS - can be configured for specific origins in production
+// Middleware
 app.use(cors());
-
-// Parse JSON request body
 app.use(express.json());
 
-// Request logging
-app.use(loggerMiddleware);
-
-// Health check endpoint
+// Health endpoint (enhanced for keep-alive)
 app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'ok', message: 'Service is running' });
+  const isKeepAliveRequest = req.headers['x-keep-alive'] === 'true';
+  
+  if (isKeepAliveRequest) {
+    console.log('🔄 Keep-alive health check received');
+  }
+  
+  res.status(200).json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    service: 'email-sms-server',
+    keepAlive: keepAlive.getStats(),
+  });
 });
 
-// API routes
-app.use('/api/email', emailRoutes);
-app.use('/api/sms', smsRoutes);
+// Your existing routes
+app.use('/api/email', require('./routes/email-routes'));
+app.use('/api/sms', require('./routes/sms-routes'));
 
-// Basic home route
+// Root endpoint
 app.get('/', (req, res) => {
-  res.status(200).json({
-    message: 'RevBoost Notification API',
-    version: '1.0.0',
-    documentation: '/docs',
-    status: 'online'
+  res.json({
+    message: 'Email & SMS Server is running',
+    status: 'active',
+    uptime: process.uptime(),
+    endpoints: [
+      '/health',
+      '/api/email/review-request',
+      '/api/email/test',
+      '/api/sms/review-request',
+      '/api/sms/test',
+    ],
   });
 });
 
-// Documentation route
-app.get('/docs', (req, res) => {
-  res.status(200).json({
-    endpoints: {
-      email: {
-        'POST /api/email/review-request': 'Send a review request email',
-        'POST /api/email/test': 'Send a test email'
-      },
-      sms: {
-        'POST /api/sms/review-request': 'Send a review request SMS',
-        'POST /api/sms/test': 'Send a test SMS'
-      }
-    }
+// Error handling
+app.use((err, req, res, next) => {
+  console.error('Server error:', err);
+  res.status(500).json({
+    success: false,
+    error: 'Internal server error',
+    message: err.message,
   });
 });
 
-// Global error handler
-app.use(errorHandler);
+// 404 handler
+app.use('*', (req, res) => {
+  res.status(404).json({
+    success: false,
+    error: 'Endpoint not found',
+    message: `${req.method} ${req.originalUrl} not found`,
+  });
+});
 
-// Start the server
+// Start server
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`📡 Health check: http://localhost:${PORT}/health`);
+  
+  // Start keep-alive service after server starts
+  setTimeout(() => {
+    keepAlive.start();
+  }, 2000);
 });
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('🛑 SIGTERM received, shutting down gracefully...');
+  process.exit(0);
+});
+
+process.on('SIGINT', () => {
+  console.log('🛑 SIGINT received, shutting down gracefully...');
+  process.exit(0);
+});
+
+module.exports = app;
