@@ -1,61 +1,58 @@
-// server.js or app.js - Your main email server file
-// Add keep-alive integration to your existing server
-
+// server.js 
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-// const { keepAlive } = require('./server-keepalive'); // Import keep-alive
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middleware
-app.use(cors());
-app.use(express.json());
+app.use(cors({
+  origin: [
+    'https://revboostapp-b0307.web.app',
+    'https://app.revboostapp.com',
+    'http://localhost:3000',
+    'http://localhost:8080',
+  ],
+  credentials: true,
+  optionsSuccessStatus: 200,
+}));
 
-// Health endpoint (enhanced for keep-alive)
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Simple health endpoint
 app.get('/health', (req, res) => {
-  const isKeepAliveRequest = req.headers['x-keep-alive'] === 'true';
-  
-  if (isKeepAliveRequest) {
-    console.log('🔄 Keep-alive health check received');
-  }
-  
   res.status(200).json({
     status: 'ok',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
     service: 'email-sms-server',
-    keepAlive: keepAlive.getStats(),
+    environment: process.env.NODE_ENV || 'development',
+    memory: {
+      used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
+      total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024),
+    },
   });
 });
 
-// Your existing routes
+// API Routes
 app.use('/api/email', require('./routes/email-routes'));
-app.use('/api/sms', require('./routes/sms-routes'));
 
 // Root endpoint
 app.get('/', (req, res) => {
   res.json({
-    message: 'Email & SMS Server is running',
-    status: 'active',
+    message: 'RevBoost Email Server',
+    status: 'online',
+    version: '1.0.0',
     uptime: process.uptime(),
+    timestamp: new Date().toISOString(),
     endpoints: [
-      '/health',
-      '/api/email/review-request',
-      '/api/email/test',
-      '/api/sms/review-request',
-      '/api/sms/test',
+      'GET /health',
+      'POST /api/email/review-request',
+      'POST /api/email/test',
+      'POST /api/email/feedback-notification',
     ],
-  });
-});
-
-// Error handling
-app.use((err, req, res, next) => {
-  console.error('Server error:', err);
-  res.status(500).json({
-    success: false,
-    error: 'Internal server error',
-    message: err.message,
   });
 });
 
@@ -68,15 +65,21 @@ app.use('*', (req, res) => {
   });
 });
 
+// Global error handler
+app.use((err, req, res, next) => {
+  console.error('Server error:', err);
+  res.status(500).json({
+    success: false,
+    error: 'Internal server error',
+    message: err.message,
+  });
+});
+
 // Start server
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📡 Health check: http://localhost:${PORT}/health`);
-  
-  // Start keep-alive service after server starts
-  setTimeout(() => {
-    keepAlive.start();
-  }, 2000);
+  console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
 });
 
 // Graceful shutdown

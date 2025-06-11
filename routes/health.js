@@ -1,34 +1,6 @@
-// routes/health.js - Enhanced health endpoint with detailed diagnostics
-
+// routes/health.js - Clean version without keep-alive
 const express = require('express');
-const { keepAlive } = require('../server-keepalive');
-const logger = require('../utils/logger');
-
 const router = express.Router();
-
-/**
- * Basic health check endpoint
- * GET /health
- */
-router.get('/', (req, res) => {
-  const isKeepAliveRequest = req.headers['x-keep-alive'] === 'true';
-  
-  if (isKeepAliveRequest) {
-    logger.info('🔄 Keep-alive health check received');
-  }
-  
-  const healthData = {
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-    environment: process.env.NODE_ENV || 'development',
-    version: process.env.npm_package_version || '1.0.0',
-    service: 'email-sms-server',
-    ...keepAlive.getHealthInfo(),
-  };
-  
-  res.status(200).json(healthData);
-});
 
 /**
  * Detailed health check with service diagnostics
@@ -41,11 +13,8 @@ router.get('/detailed', async (req, res) => {
     // Check environment variables
     const envCheck = {
       resendApiKey: !!process.env.RESEND_API_KEY,
-      twilioAccountSid: !!process.env.TWILIO_ACCOUNT_SID,
-      twilioAuthToken: !!process.env.TWILIO_AUTH_TOKEN,
-      twilioPhoneNumber: !!process.env.TWILIO_PHONE_NUMBER,
       emailFromAddress: !!process.env.EMAIL_FROM_ADDRESS,
-      renderExternalUrl: !!process.env.RENDER_EXTERNAL_URL,
+      emailFromName: !!process.env.EMAIL_FROM_NAME,
     };
     
     // Check memory usage
@@ -57,22 +26,12 @@ router.get('/detailed', async (req, res) => {
       external: `${Math.round(memoryUsage.external / 1024 / 1024)}MB`,
     };
     
-    // Check CPU usage (simplified)
-    const cpuUsage = process.cpuUsage();
-    
     // Service availability checks
     const services = {
       email: {
         configured: envCheck.resendApiKey && envCheck.emailFromAddress,
         provider: 'resend',
         status: envCheck.resendApiKey ? 'available' : 'not_configured',
-      },
-      sms: {
-        configured: envCheck.twilioAccountSid && envCheck.twilioAuthToken && envCheck.twilioPhoneNumber,
-        provider: 'twilio',
-        status: (envCheck.twilioAccountSid && envCheck.twilioAuthToken && envCheck.twilioPhoneNumber) 
-          ? 'available' 
-          : 'not_configured',
       },
     };
     
@@ -92,53 +51,26 @@ router.get('/detailed', async (req, res) => {
         pid: process.pid,
       },
       memory: memoryInfo,
-      cpu: {
-        user: cpuUsage.user,
-        system: cpuUsage.system,
-      },
       environment: envCheck,
       services,
-      ...keepAlive.getHealthInfo(),
       endpoints: {
         health: '/health',
         detailedHealth: '/health/detailed',
-        emailTest: '/api/email/test',
-        smsTest: '/api/sms/test',
         reviewRequest: '/api/email/review-request',
+        emailTest: '/api/email/test',
+        feedbackNotification: '/api/email/feedback-notification',
       },
     };
     
     res.status(200).json(detailedHealth);
   } catch (error) {
-    logger.error('Error in detailed health check:', error);
+    console.error('Error in detailed health check:', error);
     
     res.status(500).json({
       status: 'error',
       timestamp: new Date().toISOString(),
       error: error.message,
       service: 'email-sms-server',
-    });
-  }
-});
-
-/**
- * Keep-alive statistics endpoint
- * GET /health/keepalive
- */
-router.get('/keepalive', (req, res) => {
-  try {
-    const stats = keepAlive.getStats();
-    
-    res.status(200).json({
-      status: 'ok',
-      timestamp: new Date().toISOString(),
-      keepAlive: stats,
-    });
-  } catch (error) {
-    res.status(500).json({
-      status: 'error',
-      timestamp: new Date().toISOString(),
-      error: error.message,
     });
   }
 });
@@ -172,40 +104,15 @@ router.get('/ready', (req, res) => {
 });
 
 /**
- * Liveness probe (for Kubernetes-style health checks)
+ * Simple liveness probe
  * GET /health/live
  */
 router.get('/live', (req, res) => {
-  // Simple liveness check - if we can respond, we're alive
   res.status(200).json({
     status: 'alive',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
   });
-});
-
-/**
- * Wake-up endpoint (for manual server wake-up)
- * POST /health/wakeup
- */
-router.post('/wakeup', (req, res) => {
-  logger.info('🌅 Manual wake-up request received');
-  
-  // Perform a simple operation to ensure the server is responsive
-  const startTime = Date.now();
-  
-  setTimeout(() => {
-    const responseTime = Date.now() - startTime;
-    
-    res.status(200).json({
-      status: 'awake',
-      timestamp: new Date().toISOString(),
-      message: 'Server is now fully awake and responsive',
-      responseTime: `${responseTime}ms`,
-      uptime: process.uptime(),
-      ...keepAlive.getHealthInfo(),
-    });
-  }, 100); // Small delay to simulate wake-up
 });
 
 /**
