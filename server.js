@@ -3,7 +3,7 @@
 
 const express = require('express');
 const cors = require('cors');
-const { keepAlive } = require('./server-keepalive'); // Import keep-alive
+// const { keepAlive } = require('./server-keepalive'); // Import keep-alive
 
 const app = express();
 const PORT = process.env.PORT || 3000;
